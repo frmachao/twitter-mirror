@@ -47,7 +47,7 @@ model Thread {
   rootTweetId String                  // 根推文ID
   authorId    String                  // 作者ID
   createdAt   BigInt                  // 创建时间
-  status      String   @default("pending") // 线程状态：pending（待处理）, translated（已翻译）, published（已发布）, failed（失败）
+  status      String   @default("pending") // 线程状态：pending（待处理）, analyzed（已分析）, translated（已翻译）, published（已发布）, failed（失败）
   tweets      Tweet[]                      // 线程包含的所有推文
   updatedAt   BigInt?                     // 更新时间
 } 

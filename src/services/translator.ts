@@ -2,25 +2,53 @@ import { PrismaClient } from '@prisma/client';
 import { Logger } from '../utils/logger';
 import axios from 'axios';
 import { config } from '../config';
+import { CronJob } from 'cron';
+import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 
 export class Translator {
   private prisma: PrismaClient;
   private logger: Logger;
+  private job: CronJob;
+  private isProcessing: boolean = false;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.logger = new Logger('Translator');
+    // 创建定时任务，每分钟执行一次
+    this.job = new CronJob('* * * * *', () => this.translatePendingThreads(), null, false);
+  }
+
+  /**
+   * 启动翻译服务
+   */
+  public start(): void {
+    this.job.start();
+    this.logger.info('Translation service started');
+  }
+
+  /**
+   * 停止翻译服务
+   */
+  public stop(): void {
+    this.job.stop();
+    this.logger.info('Translation service stopped');
   }
 
   /**
    * 处理待翻译的线程
    */
   public async translatePendingThreads(): Promise<void> {
+    if (this.isProcessing) {
+      this.logger.warn('Previous translation task is still running, skipping...');
+      return;
+    }
+
+    this.isProcessing = true;
     try {
       // 获取待翻译的线程
       const thread = await this.prisma.thread.findFirst({
         where: {
-          status: 'analyzed'  // 线程分析完成后的状态
+          status: Status.Analyzed  // 使用枚举值
         },
         include: {
           tweets: true
@@ -34,6 +62,11 @@ export class Translator {
       // 开始翻译线程中的每条推文
       for (const tweet of thread.tweets) {
         try {
+          // 检查状态转换是否有效
+          if (!isValidStatusTransition(tweet.status as Status, Status.Translated)) {
+            throw new InvalidStatusTransitionError(tweet.status as Status, Status.Translated);
+          }
+
           // 调用翻译服务
           const translatedText = await this.translateText(tweet.text);
 
@@ -42,7 +75,7 @@ export class Translator {
             where: { id: tweet.id },
             data: {
               translatedText,
-              status: 'translated'
+              status: Status.Translated
             }
           });
 
@@ -50,11 +83,17 @@ export class Translator {
         } catch (error) {
           this.logger.error(`Failed to translate tweet ${tweet.id}:`, error);
           
+          // 检查状态转换是否有效
+          if (!isValidStatusTransition(tweet.status as Status, Status.Failed)) {
+            this.logger.warn(`Cannot transition tweet ${tweet.id} from ${tweet.status} to failed status`);
+            continue;
+          }
+
           // 更新失败状态
           await this.prisma.tweet.update({
             where: { id: tweet.id },
             data: {
-              status: 'translation_failed'
+              status: Status.Failed
             }
           });
 
@@ -63,11 +102,16 @@ export class Translator {
         }
       }
 
+      // 检查状态转换是否有效
+      if (!isValidStatusTransition(thread.status as Status, Status.Translated)) {
+        throw new InvalidStatusTransitionError(thread.status as Status, Status.Translated);
+      }
+
       // 更新线程状态
       await this.prisma.thread.update({
         where: { id: thread.id },
         data: {
-          status: 'translated',
+          status: Status.Translated,
           updatedAt: BigInt(Date.now())
         }
       });
@@ -75,6 +119,8 @@ export class Translator {
       this.logger.info(`Successfully translated thread ${thread.id}`);
     } catch (error) {
       this.logger.error('Error in translatePendingThreads:', error);
+    } finally {
+      this.isProcessing = false;
     }
   }
 

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { Logger } from '../utils/logger';
+import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 
 export class ThreadAnalyzer {
   private static instance: ThreadAnalyzer;
@@ -110,7 +111,7 @@ export class ThreadAnalyzer {
         rootTweetId: tweet.conversationId,
         authorId: tweet.authorId,
         createdAt: tweet.createdAt,
-        status: 'pending',
+        status: Status.Pending,
         tweets: {
           connect: { id: tweet.id }
         }
@@ -122,13 +123,18 @@ export class ThreadAnalyzer {
       }
     });
 
+    // 检查状态转换是否有效
+    if (!isValidStatusTransition(Status.Pending, Status.Analyzed)) {
+      throw new InvalidStatusTransitionError(Status.Pending, Status.Analyzed);
+    }
+
     // 更新推文状态
     await this.prisma.tweet.update({
       where: { id: tweet.id },
       data: {
         threadId: thread.id,
         isRoot: tweet.id === tweet.conversationId,
-        status: 'analyzed'
+        status: Status.Analyzed
       }
     });
 
@@ -137,7 +143,8 @@ export class ThreadAnalyzer {
       await this.prisma.thread.update({
         where: { id: thread.id },
         data: {
-          rootTweetId: tweet.id
+          rootTweetId: tweet.id,
+          status: Status.Analyzed
         }
       });
     }
