@@ -1,0 +1,53 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 处理状态记录 - 用于监控服务的状态管理
+model ProcessState {
+  id            String   @id
+  startTime     BigInt
+  updatedAt     BigInt
+  lastTweetId   String?
+}
+
+// 推文记录 - 存储原始推文数据
+model Tweet {
+  id              String   @id            // 推文ID
+  authorId        String                  // 作者ID
+  conversationId  String?                 // 会话ID，用于识别线程关系
+  inReplyToUserId String?                 // 回复的用户ID
+  createdAt       BigInt                  // 创建时间
+  text            String                  // 原始文本
+  mediaUrls       String?                 // 媒体URL，JSON字符串数组
+  status          String   @default("pending") // 推文处理状态：pending（待处理）, analyzed（已分析）, translated（已翻译）, published（已发布）, failed（失败）
+  isRoot          Boolean  @default(false)     // 是否是线程的根推文
+  threadId        String?                      // 所属线程ID
+  thread          Thread?  @relation(fields: [threadId], references: [id])  // 关联的线程
+  translatedText  String?                      // 翻译后的文本
+}
+
+// 发布账号记录 - 管理发布账号池
+model PublisherAccount {
+  id              String   @id
+  token           String                  // 账号的访问令牌
+  dailyUsageCount Int      @default(0)    // 当日使用次数
+  lastResetAt     BigInt                  // 上次重置时间
+  createdAt       BigInt                  // 创建时间
+  updatedAt       BigInt                  // 更新时间
+}
+
+// 线程记录 - 组织推文发布单位
+model Thread {
+  id          String   @id            // 线程ID，对应会话ID
+  rootTweetId String                  // 根推文ID
+  authorId    String                  // 作者ID
+  createdAt   BigInt                  // 创建时间
+  status      String   @default("pending") // 线程状态：pending（待处理）, translated（已翻译）, published（已发布）, failed（失败）
+  tweets      Tweet[]                      // 线程包含的所有推文
+  updatedAt   BigInt?                     // 更新时间
+} 

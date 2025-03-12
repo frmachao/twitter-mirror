@@ -1,0 +1,32 @@
+{
+  "name": "twitter-mirror",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Twitter Mirror - A robust tweet monitoring and publishing system",
+  "dependencies": {
+    "@prisma/client": "^5.10.2",
+    "axios": "^1.8.3",
+    "cron": "^3.1.0",
+    "dotenv": "^16.4.5",
+    "twitter-api-sdk": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/cron": "^2.4.0",
+    "@types/node": "^20.11.24",
+    "prisma": "^5.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "yarn@1.22.19+sha1.4ba7fc5c6e704fce2066ecbfb0b0d8976fe62447"
+}
