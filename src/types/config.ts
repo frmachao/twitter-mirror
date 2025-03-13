@@ -4,9 +4,12 @@ export interface PublisherAccount {
 }
 
 export interface Config {
-  monitorAccountToken: string;
-  targetUserId: string;
-  publisherAccounts: PublisherAccount[];
+  twitterConfig: {
+    name: string;
+    monitorAccountToken: string;
+    publisherAccountToken: string;
+    targetUserId: string;
+  }[];
   monitorIntervalMs: number;
   maxTweetsPerRequest: number;
   translationApiUrl: string;

@@ -1,24 +1,19 @@
 import { Client } from 'twitter-api-sdk';
-import { config } from '../config';
+import { Config } from '../types/config';
 
 export class TwitterClient {
   private static instance: TwitterClient;
   private monitorClient: Client;
-  private publisherClients: Map<string, Client>;
+  private publisherClient: Client;
 
-  private constructor() {
-    this.monitorClient = new Client(config.monitorAccountToken);
-    this.publisherClients = new Map(
-      config.publisherAccounts.map(account => [
-        account.token,
-        new Client(account.token)
-      ])
-    );
+  private constructor(twitterConfig: Config['twitterConfig'][0]) {
+    this.monitorClient = new Client(twitterConfig.monitorAccountToken);
+    this.publisherClient = new Client(twitterConfig.publisherAccountToken);
   }
 
-  public static getInstance(): TwitterClient {
+  public static getInstance(twitterConfig: Config['twitterConfig'][0]): TwitterClient {
     if (!TwitterClient.instance) {
-      TwitterClient.instance = new TwitterClient();
+      TwitterClient.instance = new TwitterClient(twitterConfig);
     }
     return TwitterClient.instance;
   }
@@ -27,11 +22,7 @@ export class TwitterClient {
     return this.monitorClient;
   }
 
-  public getPublisherClient(token: string): Client | undefined {
-    return this.publisherClients.get(token);
-  }
-
-  public getAllPublisherClients(): Client[] {
-    return Array.from(this.publisherClients.values());
+  public getPublisherClient(): Client {
+    return this.publisherClient;
   }
 } 

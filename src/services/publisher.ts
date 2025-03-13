@@ -1,19 +1,20 @@
-import { PrismaClient } from '@prisma/client';
+import { Database } from './database';
 import { TwitterClient } from './twitter-client';
 import { Logger } from '../utils/logger';
 import { CronJob } from 'cron';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
+import { Config } from '../types/config';
 
 export class TweetPublisher {
-  private prisma: PrismaClient;
+  private prisma: ReturnType<Database['getPrisma']>;
   private twitterClient: TwitterClient;
   private logger: Logger;
   private job: CronJob;
   private isProcessing: boolean = false;
 
-  constructor() {
-    this.prisma = new PrismaClient();
-    this.twitterClient = TwitterClient.getInstance();
+  constructor(private twitterConfig: Config['twitterConfig'][0]) {
+    this.prisma = Database.getInstance().getPrisma();
+    this.twitterClient = TwitterClient.getInstance(twitterConfig);
     this.logger = new Logger('TweetPublisher');
     // 创建定时任务，每分钟执行一次
     this.job = new CronJob('* * * * *', () => this.publishPendingThreads(), null, false);
@@ -46,10 +47,10 @@ export class TweetPublisher {
 
     this.isProcessing = true;
     try {
-      // 获取一个可用的发布账号
-      const account = await this.getAvailableAccount();
-      if (!account) {
-        this.logger.warn('No available publishing accounts');
+      // 获取Twitter客户端
+      const client = this.twitterClient.getPublisherClient();
+      if (!client) {
+        this.logger.error(`Failed to get Twitter client for account ${this.twitterConfig.name}`);
         return;
       }
 
@@ -68,13 +69,6 @@ export class TweetPublisher {
       });
 
       if (!thread) {
-        return;
-      }
-
-      // 获取Twitter客户端
-      const client = this.twitterClient.getPublisherClient(account.token);
-      if (!client) {
-        this.logger.error(`Failed to get Twitter client for account ${account.id}`);
         return;
       }
 
@@ -147,69 +141,11 @@ export class TweetPublisher {
         }
       });
 
-      // 更新账号使用统计
-      await this.updateAccountUsage(account.id);
-
       this.logger.info(`Successfully published thread ${thread.id}`);
     } catch (error) {
       this.logger.error('Error in publishPendingThreads:', error);
     } finally {
       this.isProcessing = false;
-    }
-  }
-
-  /**
-   * 获取一个可用的发布账号
-   */
-  private async getAvailableAccount() {
-    const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
-
-    return await this.prisma.publisherAccount.findFirst({
-      where: {
-        OR: [
-          { dailyUsageCount: { lt: 17 } },
-          { lastResetAt: { lt: BigInt(oneDayAgo) } }
-        ]
-      },
-      orderBy: {
-        dailyUsageCount: 'asc'
-      }
-    });
-  }
-
-  /**
-   * 更新账号使用统计
-   */
-  private async updateAccountUsage(accountId: string): Promise<void> {
-    const now = BigInt(Date.now());
-    const oneDayAgo = BigInt(Date.now() - 24 * 60 * 60 * 1000);
-
-    const account = await this.prisma.publisherAccount.findUnique({
-      where: { id: accountId }
-    });
-
-    if (!account) return;
-
-    // 如果超过24小时，重置计数
-    if (account.lastResetAt < oneDayAgo) {
-      await this.prisma.publisherAccount.update({
-        where: { id: accountId },
-        data: {
-          dailyUsageCount: 1,
-          lastResetAt: now,
-          updatedAt: now
-        }
-      });
-    } else {
-      // 增加使用计数
-      await this.prisma.publisherAccount.update({
-        where: { id: accountId },
-        data: {
-          dailyUsageCount: account.dailyUsageCount + 1,
-          updatedAt: now
-        }
-      });
     }
   }
 } 

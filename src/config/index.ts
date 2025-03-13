@@ -6,9 +6,7 @@ dotenv.config();
 
 function validateConfig(config: Partial<Config>): config is Config {
   const requiredFields: (keyof Config)[] = [
-    'monitorAccountToken',
-    'targetUserId',
-    'publisherAccounts',
+    'twitterConfig',
     'monitorIntervalMs',
     'maxTweetsPerRequest',
     'translationApiUrl'
@@ -26,10 +24,8 @@ function validateConfig(config: Partial<Config>): config is Config {
 function loadConfig(): Config {
   try {
     const config: Partial<Config> = {
-      monitorAccountToken: process.env.MONITOR_ACCOUNT_TOKEN,
-      targetUserId: process.env.TARGET_USER_ID,
-      publisherAccounts: process.env.PUBLISHER_ACCOUNTS ? 
-        JSON.parse(process.env.PUBLISHER_ACCOUNTS) : [],
+      twitterConfig: process.env.TWITTER_CONFIG ? 
+        JSON.parse(process.env.TWITTER_CONFIG) : [],
       monitorIntervalMs: process.env.MONITOR_INTERVAL_MS ? 
         parseInt(process.env.MONITOR_INTERVAL_MS) : 900000,
       maxTweetsPerRequest: process.env.MAX_TWEETS_PER_REQUEST ? 

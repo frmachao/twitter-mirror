@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Database } from './database';
 import { Logger } from '../utils/logger';
 import axios from 'axios';
 import { config } from '../config';
@@ -6,13 +6,13 @@ import { CronJob } from 'cron';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 
 export class Translator {
-  private prisma: PrismaClient;
+  private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
   private job: CronJob;
   private isProcessing: boolean = false;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('Translator');
     // 创建定时任务，每分钟执行一次
     this.job = new CronJob('* * * * *', () => this.translatePendingThreads(), null, false);

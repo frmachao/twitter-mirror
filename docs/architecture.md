@@ -1,7 +1,7 @@
 ```mermaid
 graph TB
     subgraph 配置管理
-    Config[配置文件<br/>- API密钥<br/>- 目标用户<br/>- 发布账号池<br/>- 监控间隔]
+    Config[配置文件<br/>- API密钥<br/>- 目标用户<br/>- 监控间隔]
     end
 
     subgraph 监控服务
@@ -13,12 +13,11 @@ graph TB
     subgraph 数据处理
     ThreadAnalyzer[推文线程分析器<br/>- 会话关系分析<br/>- 线程状态管理]
     Translator[本地化处理<br/>HTTP服务]
-    DB[(数据库<br/>Tweet表：原始推文<br/>Thread表：发布单位<br/>PublisherAccount表：账号池)]
+    DB[(数据库<br/>Tweet表：原始推文<br/>Thread表：发布单位)]
     end
 
     subgraph 发布服务
     Publisher[发布控制器<br/>Cron任务<br/>1分钟/次]
-    AccountPool[发布账号池<br/>轮询调度]
     PublishRateLimit[发布限流控制<br/>17次/24小时]
     end
 
@@ -30,8 +29,7 @@ graph TB
     ThreadAnalyzer --> Translator
     Translator --> DB
     DB --> Publisher
-    Publisher --> AccountPool
-    AccountPool --> PublishRateLimit
+    Publisher --> PublishRateLimit
     
     classDef config fill:#f9f,stroke:#333
     classDef monitor fill:#bbf,stroke:#333
@@ -41,5 +39,5 @@ graph TB
     class Config config
     class Monitor,RateLimit,LastState monitor
     class ThreadAnalyzer,Translator,DB process
-    class Publisher,AccountPool,PublishRateLimit publish
+    class Publisher,PublishRateLimit publish
 ``` 

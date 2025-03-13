@@ -1,26 +1,50 @@
 import { CronJob } from 'cron';
-import { PrismaClient } from '@prisma/client';
+import { Database } from './database';
 import { TwitterClient } from './twitter-client';
 import { ThreadAnalyzer } from './thread-analyzer';
-import { TwitterApiError, TwitterMedia } from '../types/twitter';
+import { TwitterError, TwitterResponse, ExtendedMedia } from '../types/twitter';
 import { config } from '../config';
 import { Logger } from '../utils/logger';
+import { Config } from '../types/config';
+import { DateUtils } from '../utils/date';
 
 export class TweetMonitor {
   private job: CronJob;
-  private prisma: PrismaClient;
+  private prisma: ReturnType<Database['getPrisma']>;
   private twitterClient: TwitterClient;
   private threadAnalyzer: ThreadAnalyzer;
   private isProcessing: boolean = false;
   private logger: Logger;
 
-  constructor() {
-    this.prisma = new PrismaClient();
-    this.twitterClient = TwitterClient.getInstance();
+  constructor(private twitterConfig: Config['twitterConfig'][0]) {
+    this.prisma = Database.getInstance().getPrisma();
+    this.twitterClient = TwitterClient.getInstance(twitterConfig);
     this.threadAnalyzer = ThreadAnalyzer.getInstance();
     this.logger = new Logger('TweetMonitor');
     // 创建定时任务，每15分钟执行一次
     this.job = new CronJob('*/15 * * * *', () => this.monitor(), null, false);
+  }
+
+  private async processMedia(mediaKeys: string[], mediaMap: Map<string, ExtendedMedia>): Promise<string[]> {
+    const mediaUrls: string[] = [];
+    for (const mediaKey of mediaKeys) {
+      const media = mediaMap.get(mediaKey);
+      if (media) {
+        if (media.type === 'photo' && media.url) {
+          mediaUrls.push(media.url);
+        } else if ((media.type === 'video' || media.type === 'animated_gif') && media.variants) {
+          const highestBitrateVariant = media.variants.reduce((prev, current) => {
+            return (current.bit_rate || 0) > (prev.bit_rate || 0) ? current : prev;
+          });
+          if (highestBitrateVariant.url) {
+            mediaUrls.push(highestBitrateVariant.url);
+          }
+        } else if (media.preview_image_url) {
+          mediaUrls.push(media.preview_image_url);
+        }
+      }
+    }
+    return mediaUrls;
   }
 
   private async monitor() {
@@ -49,12 +73,13 @@ export class TweetMonitor {
       const client = this.twitterClient.getMonitorClient();
       
       try {
-        const response = await client.tweets.usersIdTweets(config.targetUserId, {
+        const response: TwitterResponse = await client.tweets.usersIdTweets(this.twitterConfig.targetUserId, {
           max_results: config.maxTweetsPerRequest,
           since_id: state.lastTweetId || undefined,
-          "tweet.fields": ["created_at", "conversation_id", "in_reply_to_user_id", "attachments", "author_id"],
-          "media.fields": ["media_key", "type", "preview_image_url", "variants"],
-          "expansions": ["attachments.media_keys"]
+          "tweet.fields": ["id", "text", "author_id", "created_at", "conversation_id", "in_reply_to_user_id"],
+          "media.fields": ["url", "preview_image_url", "type", "variants"],
+          "expansions": ["author_id", "attachments.media_keys"],
+          start_time: DateUtils.getFiveMinutesAgo()
         });
 
         if (!response.data?.length) {
@@ -63,7 +88,7 @@ export class TweetMonitor {
         }
 
         // 获取媒体信息
-        const mediaMap = new Map<string, TwitterMedia>();
+        const mediaMap = new Map<string, ExtendedMedia>();
         if (response.includes?.media) {
           for (const media of response.includes.media) {
             if (media.media_key) {
@@ -75,32 +100,13 @@ export class TweetMonitor {
         // 处理获取到的推文
         for (const tweet of response.data) {
           // 获取媒体 URLs
-          const mediaUrls: string[] = [];
-          if (tweet.attachments?.media_keys?.length) {
-            for (const mediaKey of tweet.attachments.media_keys) {
-              const media = mediaMap.get(mediaKey);
-              if (media) {
-                if (media.type === 'photo') {
-                  // 对于图片，使用第一个变体的 URL
-                  const url = media.variants?.[0]?.url;
-                  if (url) mediaUrls.push(url);
-                } else if (media.type === 'video' || media.type === 'animated_gif') {
-                  // 对于视频和 GIF，使用最高比特率的变体
-                  const variant = media.variants
-                    ?.sort((a, b) => (b.bit_rate || 0) - (a.bit_rate || 0))
-                    ?.[0];
-                  const url = variant?.url || media.preview_image_url;
-                  if (url) mediaUrls.push(url);
-                }
-              }
-            }
-          }
+          const mediaUrls = await this.processMedia(tweet.attachments?.media_keys || [], mediaMap);
 
           // 创建推文记录
           await this.prisma.tweet.create({
             data: {
               id: tweet.id,
-              authorId: config.targetUserId,
+              authorId: this.twitterConfig.targetUserId,
               conversationId: tweet.conversation_id || null,
               createdAt: BigInt(new Date(tweet.created_at!).getTime()),
               text: tweet.text,
@@ -124,7 +130,7 @@ export class TweetMonitor {
         });
 
       } catch (error) {
-        const twitterError = error as TwitterApiError;
+        const twitterError = error as TwitterError;
         if (twitterError.status === 429) {
           const resetTime = twitterError.headers?.['x-rate-limit-reset'];
           if (resetTime) {

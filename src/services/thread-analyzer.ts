@@ -1,13 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { Database } from './database';
 import { Logger } from '../utils/logger';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 
 export class ThreadAnalyzer {
   private static instance: ThreadAnalyzer;
-  private prisma: PrismaClient;
+  private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
   private constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('ThreadAnalyzer');
   }
 
