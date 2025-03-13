@@ -7,9 +7,9 @@ dotenv.config();
 function validateConfig(config: Partial<Config>): config is Config {
   const requiredFields: (keyof Config)[] = [
     'twitterConfig',
-    'monitorIntervalMs',
     'maxTweetsPerRequest',
-    'translationApiUrl'
+    'translationApiUrl',
+    'cron'
   ];
 
   for (const field of requiredFields) {
@@ -26,15 +26,19 @@ function loadConfig(): Config {
     const config: Partial<Config> = {
       twitterConfig: process.env.TWITTER_CONFIG ? 
         JSON.parse(process.env.TWITTER_CONFIG) : [],
-      monitorIntervalMs: process.env.MONITOR_INTERVAL_MS ? 
-        parseInt(process.env.MONITOR_INTERVAL_MS) : 900000,
       maxTweetsPerRequest: process.env.MAX_TWEETS_PER_REQUEST ? 
         parseInt(process.env.MAX_TWEETS_PER_REQUEST) : 5,
       translationApiUrl: process.env.TRANSLATION_API_URL,
       translationSourceLang: process.env.TRANSLATION_SOURCE_LANG || 'en',
       translationTargetLang: process.env.TRANSLATION_TARGET_LANG || 'zh',
       translationTimeout: process.env.TRANSLATION_TIMEOUT ? 
-        parseInt(process.env.TRANSLATION_TIMEOUT) : 5000
+        parseInt(process.env.TRANSLATION_TIMEOUT) : 5000,
+      cron: {
+        monitor: process.env.CRON_MONITOR || '*/15 * * * *',      // 每15分钟
+        analyzer: process.env.CRON_ANALYZER || '* * * * *',       // 每分钟
+        translator: process.env.CRON_TRANSLATOR || '* * * * *',   // 每分钟
+        publisher: process.env.CRON_PUBLISHER || '* * * * *'      // 每分钟
+      }
     };
 
     if (validateConfig(config)) {

@@ -6,16 +6,24 @@ import { CronJob } from 'cron';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 
 export class Translator {
+  private static instance: Translator;
   private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
   private job: CronJob;
   private isProcessing: boolean = false;
 
-  constructor() {
+  private constructor() {
     this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('Translator');
-    // 创建定时任务，每分钟执行一次
-    this.job = new CronJob('* * * * *', () => this.translatePendingThreads(), null, false);
+    // 使用配置中的 Cron 间隔
+    this.job = new CronJob(config.cron.translator, () => this.translatePendingThreads(), null, false);
+  }
+  
+  public static getInstance(): Translator {
+    if (!Translator.instance) {
+      Translator.instance = new Translator();
+    }
+    return Translator.instance;
   }
 
   /**

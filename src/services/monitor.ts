@@ -1,7 +1,6 @@
 import { CronJob } from 'cron';
 import { Database } from './database';
 import { TwitterClient } from './twitter-client';
-import { ThreadAnalyzer } from './thread-analyzer';
 import { TwitterError, TwitterResponse, ExtendedMedia } from '../types/twitter';
 import { config } from '../config';
 import { Logger } from '../utils/logger';
@@ -12,17 +11,15 @@ export class TweetMonitor {
   private job: CronJob;
   private prisma: ReturnType<Database['getPrisma']>;
   private twitterClient: TwitterClient;
-  private threadAnalyzer: ThreadAnalyzer;
   private isProcessing: boolean = false;
   private logger: Logger;
 
   constructor(private twitterConfig: Config['twitterConfig'][0]) {
     this.prisma = Database.getInstance().getPrisma();
     this.twitterClient = TwitterClient.getInstance(twitterConfig);
-    this.threadAnalyzer = ThreadAnalyzer.getInstance();
     this.logger = new Logger('TweetMonitor');
-    // 创建定时任务，每15分钟执行一次
-    this.job = new CronJob('*/15 * * * *', () => this.monitor(), null, false);
+    // 使用配置中的 Cron 间隔
+    this.job = new CronJob(config.cron.monitor, () => this.monitor(), null, false);
   }
 
   private async processMedia(mediaKeys: string[], mediaMap: Map<string, ExtendedMedia>): Promise<string[]> {
@@ -115,9 +112,6 @@ export class TweetMonitor {
               status: 'pending'
             }
           });
-
-          // 分析推文线程
-          await this.threadAnalyzer.analyzeTweet(tweet.id);
         }
 
         // 更新最后处理的推文ID

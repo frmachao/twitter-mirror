@@ -1,14 +1,21 @@
 import { Database } from './database';
 import { Logger } from '../utils/logger';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
+import { CronJob } from 'cron';
+import { config } from '../config';
 
 export class ThreadAnalyzer {
   private static instance: ThreadAnalyzer;
   private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
+  private job: CronJob;
+  private isProcessing: boolean = false;
+
   private constructor() {
     this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('ThreadAnalyzer');
+    // 使用配置中的 Cron 间隔
+    this.job = new CronJob(config.cron.analyzer, () => this.processPendingTweets(), null, false);
   }
 
   public static getInstance(): ThreadAnalyzer {
@@ -16,6 +23,53 @@ export class ThreadAnalyzer {
       ThreadAnalyzer.instance = new ThreadAnalyzer();
     }
     return ThreadAnalyzer.instance;
+  }
+
+  /**
+   * 启动线程分析服务
+   */
+  public start(): void {
+    this.job.start();
+    this.logger.info('Thread analyzer service started');
+  }
+
+  /**
+   * 停止线程分析服务
+   */
+  public stop(): void {
+    this.job.stop();
+    this.logger.info('Thread analyzer service stopped');
+  }
+
+  /**
+   * 处理待分析的推文
+   */
+  private async processPendingTweets(): Promise<void> {
+    if (this.isProcessing) {
+      this.logger.warn('Previous analysis task is still running, skipping...');
+      return;
+    }
+
+    this.isProcessing = true;
+    try {
+      // 获取待分析的推文
+      const pendingTweets = await this.prisma.tweet.findMany({
+        where: {
+          status: 'pending'
+        },
+        orderBy: {
+          createdAt: 'asc'
+        }
+      });
+
+      for (const tweet of pendingTweets) {
+        await this.analyzeTweet(tweet.id);
+      }
+    } catch (error) {
+      this.logger.error('Error in processPendingTweets:', error);
+    } finally {
+      this.isProcessing = false;
+    }
   }
 
   /**

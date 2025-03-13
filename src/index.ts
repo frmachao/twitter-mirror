@@ -4,6 +4,7 @@ import { TweetPublisher } from './services/publisher';
 import { Logger } from './utils/logger';
 import { config } from './config';
 import { Database } from './services/database';
+import { ThreadAnalyzer } from './services/thread-analyzer';
 
 const logger = new Logger('App');
 
@@ -14,7 +15,8 @@ async function main() {
     await database.connect();
 
     // 2. 创建核心服务实例
-    const translator = new Translator();
+    const threadAnalyzer = ThreadAnalyzer.getInstance();
+    const translator = Translator.getInstance();
     const monitors: TweetMonitor[] = [];
     const publishers: TweetPublisher[] = [];
 
@@ -27,14 +29,15 @@ async function main() {
       publishers.push(publisher);
 
       // 按照处理流程顺序启动服务
-      monitor.start();    // 每15分钟执行一次
-      publisher.start();  // 每分钟执行一次
+      monitor.start();  
+      publisher.start(); 
 
       logger.info(`All services for ${twitterConfig.name} started successfully`);
     }
 
-    // 4. 启动翻译服务
-    await translator.start(); // 每分钟执行一次
+    // 4. 启动核心服务
+    threadAnalyzer.start();
+    translator.start();
 
     // 优雅关闭处理
     process.on('SIGTERM', async () => {
@@ -42,6 +45,7 @@ async function main() {
       
       // 按照依赖关系的反序关闭服务
       translator.stop();
+      threadAnalyzer.stop();
       
       for (const publisher of publishers) {
         await publisher.stop();

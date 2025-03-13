@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { CronJob } from 'cron';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
 import { Config } from '../types/config';
+import { config } from '../config';
 
 export class TweetPublisher {
   private prisma: ReturnType<Database['getPrisma']>;
@@ -16,8 +17,8 @@ export class TweetPublisher {
     this.prisma = Database.getInstance().getPrisma();
     this.twitterClient = TwitterClient.getInstance(twitterConfig);
     this.logger = new Logger('TweetPublisher');
-    // 创建定时任务，每分钟执行一次
-    this.job = new CronJob('* * * * *', () => this.publishPendingThreads(), null, false);
+    // 使用配置中的 Cron 间隔
+    this.job = new CronJob(config.cron.publisher, () => this.publishPendingThreads(), null, false);
   }
 
   /**
