@@ -18,11 +18,16 @@
     "@prisma/client": "^5.10.2",
     "axios": "^1.8.3",
     "cron": "^3.1.0",
+    "crypto-js": "^4.2.0",
     "dotenv": "^16.4.5",
-    "twitter-api-sdk": "^1.2.1"
+    "oauth-1.0a": "^2.2.6",
+    "openai": "^4.87.3",
+    "twitter-api-sdk": "^1.2.1",
+    "twitter-v1-oauth": "^1.0.15"
   },
   "devDependencies": {
     "@types/cron": "^2.4.0",
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "^20.11.24",
     "prisma": "^5.10.2",
     "ts-node": "^10.9.2",

@@ -1,22 +1,29 @@
 import { Database } from './database';
 import { Logger } from '../utils/logger';
-import axios from 'axios';
 import { config } from '../config';
-import { CronJob } from 'cron';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
+import { EventBus, ServiceEvent } from './event-bus';
+import { TranslationFactory } from './translation-providers';
 
 export class Translator {
   private static instance: Translator;
   private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
-  private job: CronJob;
   private isProcessing: boolean = false;
+  private eventBus: EventBus;
+  private translationFactory: TranslationFactory;
 
   private constructor() {
     this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('Translator');
-    // 使用配置中的 Cron 间隔
-    this.job = new CronJob(config.cron.translator, () => this.translatePendingThreads(), null, false);
+    this.eventBus = EventBus.getInstance();
+    this.translationFactory = TranslationFactory.getInstance();
+    
+    // 订阅分析完成事件
+    this.eventBus.subscribe(ServiceEvent.ANALYSIS_COMPLETED, () => {
+      this.logger.info('Received ANALYSIS_COMPLETED event, starting translation');
+      this.translatePendingThreads();
+    });
   }
   
   public static getInstance(): Translator {
@@ -24,22 +31,6 @@ export class Translator {
       Translator.instance = new Translator();
     }
     return Translator.instance;
-  }
-
-  /**
-   * 启动翻译服务
-   */
-  public start(): void {
-    this.job.start();
-    this.logger.info('Translation service started');
-  }
-
-  /**
-   * 停止翻译服务
-   */
-  public stop(): void {
-    this.job.stop();
-    this.logger.info('Translation service stopped');
   }
 
   /**
@@ -56,7 +47,7 @@ export class Translator {
       // 获取待翻译的线程
       const thread = await this.prisma.thread.findFirst({
         where: {
-          status: Status.Analyzed  // 使用枚举值
+          status: Status.Analyzed
         },
         include: {
           tweets: true
@@ -64,9 +55,11 @@ export class Translator {
       });
 
       if (!thread) {
+        this.logger.info('No pending threads to translate');
         return;
       }
 
+      this.logger.info(`Found thread ${thread.id} with ${thread.tweets.length} tweets to translate`);
       // 开始翻译线程中的每条推文
       for (const tweet of thread.tweets) {
         try {
@@ -125,8 +118,18 @@ export class Translator {
       });
 
       this.logger.info(`Successfully translated thread ${thread.id}`);
+      
+      // 触发翻译完成事件
+      this.logger.info('Translation completed, emitting TRANSLATION_COMPLETED event');
+      this.eventBus.emit(ServiceEvent.TRANSLATION_COMPLETED, {
+        threadId: thread.id,
+        authorId: thread.authorId
+      });
     } catch (error) {
       this.logger.error('Error in translatePendingThreads:', error);
+      this.eventBus.emit(ServiceEvent.TRANSLATION_COMPLETED, {
+        error: error instanceof Error ? error : new Error('Unknown error')
+      });
     } finally {
       this.isProcessing = false;
     }
@@ -137,31 +140,15 @@ export class Translator {
    */
   private async translateText(text: string): Promise<string> {
     try {
-      const response = await axios.post(
-        config.translationApiUrl, 
-        {
-          text,
-          source_lang: config.translationSourceLang,
-          target_lang: config.translationTargetLang
-        },
-        {
-          timeout: config.translationTimeout
-        }
+      const translationProvider = this.translationFactory.getProvider();
+      return await translationProvider.translate(
+        text,
+        config.translationSourceLang || 'en',
+        config.translationTargetLang || 'zh'
       );
-
-      if (!response.data?.translated_text) {
-        throw new Error('Translation service did not return translated text');
-      }
-
-      return response.data.translated_text;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          throw new Error('Translation service timeout');
-        }
-        throw new Error(`Translation service error: ${error.response?.data?.message || error.message}`);
-      }
-      throw error;
+      this.logger.error('Error in translation service:', error);
+      throw new Error(`Translation service error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 } 

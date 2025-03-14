@@ -1,21 +1,25 @@
 import { Database } from './database';
 import { Logger } from '../utils/logger';
 import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
-import { CronJob } from 'cron';
-import { config } from '../config';
+import { EventBus, ServiceEvent } from './event-bus';
 
 export class ThreadAnalyzer {
   private static instance: ThreadAnalyzer;
   private prisma: ReturnType<Database['getPrisma']>;
   private logger: Logger;
-  private job: CronJob;
   private isProcessing: boolean = false;
+  private eventBus: EventBus;
 
   private constructor() {
     this.prisma = Database.getInstance().getPrisma();
     this.logger = new Logger('ThreadAnalyzer');
-    // 使用配置中的 Cron 间隔
-    this.job = new CronJob(config.cron.analyzer, () => this.processPendingTweets(), null, false);
+    this.eventBus = EventBus.getInstance();
+    
+    // 订阅监控完成事件
+    this.eventBus.subscribe(ServiceEvent.MONITOR_COMPLETED, () => {
+      this.logger.info('Received MONITOR_COMPLETED event, starting tweet analysis');
+      this.processPendingTweets();
+    });
   }
 
   public static getInstance(): ThreadAnalyzer {
@@ -23,22 +27,6 @@ export class ThreadAnalyzer {
       ThreadAnalyzer.instance = new ThreadAnalyzer();
     }
     return ThreadAnalyzer.instance;
-  }
-
-  /**
-   * 启动线程分析服务
-   */
-  public start(): void {
-    this.job.start();
-    this.logger.info('Thread analyzer service started');
-  }
-
-  /**
-   * 停止线程分析服务
-   */
-  public stop(): void {
-    this.job.stop();
-    this.logger.info('Thread analyzer service stopped');
   }
 
   /**
@@ -62,11 +50,24 @@ export class ThreadAnalyzer {
         }
       });
 
+      if (!pendingTweets.length) {
+        this.logger.info('No pending tweets to analyze');
+        return;
+      }
+
+      this.logger.info(`Found ${pendingTweets.length} pending tweets to analyze`);
       for (const tweet of pendingTweets) {
         await this.analyzeTweet(tweet.id);
       }
+
+      // 触发分析完成事件
+      this.logger.info('Tweet analysis completed, emitting ANALYSIS_COMPLETED event');
+      this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED);
     } catch (error) {
       this.logger.error('Error in processPendingTweets:', error);
+      this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED, {
+        error: error instanceof Error ? error : new Error('Unknown error')
+      });
     } finally {
       this.isProcessing = false;
     }

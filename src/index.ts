@@ -1,10 +1,10 @@
 import { TweetMonitor } from './services/monitor';
-import { Translator } from './services/translator';
 import { TweetPublisher } from './services/publisher';
+import { ThreadAnalyzer } from './services/thread-analyzer';
+import { Translator } from './services/translator';
 import { Logger } from './utils/logger';
 import { config } from './config';
 import { Database } from './services/database';
-import { ThreadAnalyzer } from './services/thread-analyzer';
 
 const logger = new Logger('App');
 
@@ -14,13 +14,16 @@ async function main() {
     const database = Database.getInstance();
     await database.connect();
 
-    // 2. 创建核心服务实例
-    const threadAnalyzer = ThreadAnalyzer.getInstance();
-    const translator = Translator.getInstance();
+    // 2. 初始化单例服务
+    ThreadAnalyzer.getInstance();
+    Translator.getInstance();
+    logger.info('Singleton services initialized');
+
+    // 3. 创建服务实例
     const monitors: TweetMonitor[] = [];
     const publishers: TweetPublisher[] = [];
 
-    // 3. 为每个配置创建服务实例
+    // 4. 为每个配置创建服务实例
     for (const twitterConfig of config.twitterConfig) {
       const monitor = new TweetMonitor(twitterConfig);
       const publisher = new TweetPublisher(twitterConfig);
@@ -28,36 +31,26 @@ async function main() {
       monitors.push(monitor);
       publishers.push(publisher);
 
-      // 按照处理流程顺序启动服务
-      monitor.start();  
-      publisher.start(); 
+      // 启动监控服务
+      monitor.start();
 
-      logger.info(`All services for ${twitterConfig.name} started successfully`);
+      logger.info(`Services for ${twitterConfig.name} initialized successfully`);
     }
 
-    // 4. 启动核心服务
-    threadAnalyzer.start();
-    translator.start();
+    logger.info('All services started successfully');
 
-    // 优雅关闭处理
+    // 5. 优雅关闭
     process.on('SIGTERM', async () => {
-      logger.info('Received SIGTERM signal, shutting down services...');
+      logger.info('Received SIGTERM signal, shutting down gracefully...');
       
-      // 按照依赖关系的反序关闭服务
-      translator.stop();
-      threadAnalyzer.stop();
-      
-      for (const publisher of publishers) {
-        await publisher.stop();
-      }
-      
+      // 停止监控服务
       for (const monitor of monitors) {
-        await monitor.stop();
+        monitor.stop();
       }
       
-      await database.disconnect();
+      // 断开数据库连接
+      await Database.getInstance().disconnect();
       
-      logger.info('All services stopped');
       process.exit(0);
     });
 
