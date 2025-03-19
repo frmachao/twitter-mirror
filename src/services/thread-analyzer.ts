@@ -29,6 +29,7 @@ export class ThreadAnalyzer {
     return ThreadAnalyzer.instance;
   }
 
+
   /**
    * 处理待分析的推文
    */
@@ -45,6 +46,13 @@ export class ThreadAnalyzer {
         where: {
           status: 'pending'
         },
+        select: {
+          id: true,
+          conversationId: true,
+          inReplyToUserId: true,
+          authorId: true,
+          createdAt: true
+        },
         orderBy: {
           createdAt: 'asc'
         }
@@ -56,18 +64,42 @@ export class ThreadAnalyzer {
       }
 
       this.logger.info(`Found ${pendingTweets.length} pending tweets to analyze`);
+      
+      // 记录已分析完成的线程ID
+      const analyzedThreadIds = new Set<string>();
+      
+      // 处理所有待分析推文
       for (const tweet of pendingTweets) {
-        await this.analyzeTweet(tweet.id);
+        await this.analyzeTweet(tweet);
+        
+        // 获取更新后的推文信息
+        const updatedTweet = await this.prisma.tweet.findUnique({
+          where: { id: tweet.id },
+          select: { threadId: true }
+        });
+        
+        if (updatedTweet?.threadId) {
+          analyzedThreadIds.add(updatedTweet.threadId);
+        }
       }
 
-      // 触发分析完成事件
-      this.logger.info('Tweet analysis completed, emitting ANALYSIS_COMPLETED event');
-      this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED);
+      // 触发已分析线程的事件
+      for (const threadId of analyzedThreadIds) {
+        const thread = await this.prisma.thread.findUnique({
+          where: { id: threadId },
+          select: { authorId: true }
+        });
+        
+        if (thread) {
+          this.logger.info(`Thread ${threadId} analysis completed, emitting ANALYSIS_COMPLETED event`);
+          this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED, {
+            threadId,
+            authorId: thread.authorId
+          });
+        }
+      }
     } catch (error) {
       this.logger.error('Error in processPendingTweets:', error);
-      this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED, {
-        error: error instanceof Error ? error : new Error('Unknown error')
-      });
     } finally {
       this.isProcessing = false;
     }
@@ -75,27 +107,16 @@ export class ThreadAnalyzer {
 
   /**
    * 分析新的推文，识别线程关系
-   * @param tweetId 需要分析的推文ID
+   * @param tweet 需要分析的推文数据
    */
-  public async analyzeTweet(tweetId: string): Promise<void> {
+  public async analyzeTweet(tweet: {
+    id: string;
+    conversationId: string | null;
+    inReplyToUserId: string | null;
+    authorId: string;
+    createdAt: bigint;
+  }): Promise<void> {
     try {
-      // 获取推文信息
-      const tweet = await this.prisma.tweet.findUnique({
-        where: { id: tweetId },
-        select: {
-          id: true,
-          conversationId: true,
-          inReplyToUserId: true,
-          authorId: true,
-          createdAt: true
-        }
-      });
-
-      if (!tweet) {
-        this.logger.warn(`Tweet ${tweetId} not found`);
-        return;
-      }
-
       // 如果没有会话ID，说明这是一个独立的推文
       if (!tweet.conversationId) {
         await this.handleSingleTweet(tweet);
@@ -121,14 +142,13 @@ export class ThreadAnalyzer {
     createdAt: bigint;
   }): Promise<void> {
     // 为独立推文创建线程记录
-    // 使用推文ID作为线程ID，保持一致性
     const thread = await this.prisma.thread.create({
       data: {
         id: tweet.id,
         rootTweetId: tweet.id,
         authorId: tweet.authorId,
         createdAt: tweet.createdAt,
-        status: 'pending',
+        status: Status.Analyzed,
         tweets: {
           connect: { id: tweet.id }
         }
@@ -140,8 +160,8 @@ export class ThreadAnalyzer {
       where: { id: tweet.id },
       data: {
         threadId: thread.id,
-        isRoot: true,  // 独立推文自身就是根
-        status: 'analyzed'
+        isRoot: true,
+        status: Status.Analyzed
       }
     });
   }
@@ -193,15 +213,16 @@ export class ThreadAnalyzer {
       }
     });
 
-    // 如果这是根推文，更新线程信息
-    if (tweet.id === tweet.conversationId) {
-      await this.prisma.thread.update({
-        where: { id: thread.id },
-        data: {
+    // 合并线程更新操作
+    await this.prisma.thread.update({
+      where: { id: thread.id },
+      data: {
+        ...(tweet.id === tweet.conversationId && {
           rootTweetId: tweet.id,
-          status: Status.Analyzed
-        }
-      });
-    }
+        }),
+        status: Status.Analyzed,
+        updatedAt: BigInt(Date.now())
+      }
+    });
   }
 } 

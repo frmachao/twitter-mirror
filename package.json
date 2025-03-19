@@ -8,7 +8,9 @@
     "dev": "ts-node src/index.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "retry-failed": "ts-node scripts/retry-failed-tweets.ts",
+    "trigger-translation": "ts-node scripts/trigger-translation.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,10 +22,13 @@
     "cron": "^3.1.0",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.4.5",
+    "form-data": "^4.0.2",
     "oauth-1.0a": "^2.2.6",
     "openai": "^4.87.3",
+    "tslib": "^2.8.1",
     "twitter-api-sdk": "^1.2.1",
-    "twitter-v1-oauth": "^1.0.15"
+    "twitter-v1-oauth": "^1.0.15",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/cron": "^2.4.0",

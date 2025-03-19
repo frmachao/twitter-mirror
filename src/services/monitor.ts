@@ -7,8 +7,10 @@ import { Logger } from '../utils/logger';
 import { Config } from '../types/config';
 import { DateUtils } from '../utils/date';
 import { EventBus, ServiceEvent } from './event-bus';
+import { Status } from '../types/status';
 
 export class TweetMonitor {
+  private static instances: Map<string, TweetMonitor> = new Map();
   private job!: CronJob;
   private prisma: ReturnType<Database['getPrisma']>;
   private twitterClient: TwitterClient;
@@ -16,11 +18,18 @@ export class TweetMonitor {
   private logger: Logger;
   private eventBus: EventBus;
 
-  constructor(private twitterConfig: Config['twitterConfig'][0]) {
+  private constructor(private twitterConfig: Config['twitterConfig'][0]) {
     this.prisma = Database.getInstance().getPrisma();
     this.twitterClient = TwitterClient.getInstance(twitterConfig);
-    this.logger = new Logger('TweetMonitor');
+    this.logger = new Logger(`TweetMonitor:${twitterConfig.name}`);
     this.eventBus = EventBus.getInstance();
+  }
+
+  public static getInstance(twitterConfig: Config['twitterConfig'][0]): TweetMonitor {
+    if (!this.instances.has(twitterConfig.targetUserId)) {
+      this.instances.set(twitterConfig.targetUserId, new TweetMonitor(twitterConfig));
+    }
+    return this.instances.get(twitterConfig.targetUserId)!;
   }
 
   private async processMedia(mediaKeys: string[], mediaMap: Map<string, ExtendedMedia>): Promise<string[]> {
@@ -53,15 +62,17 @@ export class TweetMonitor {
 
     this.isProcessing = true;
     try {
-      // 获取处理状态
-      let state = await this.prisma.processState.findFirst({
-        where: { id: 'default' }
+      // 获取处理状态，使用目标用户ID作为id
+      let state = await this.prisma.processState.findUnique({
+        where: { 
+          id: this.twitterConfig.targetUserId
+        }
       });
 
       if (!state) {
         state = await this.prisma.processState.create({
           data: {
-            id: 'default',
+            id: this.twitterConfig.targetUserId,
             startTime: BigInt(Date.now()),
             updatedAt: BigInt(Date.now())
           }
@@ -71,13 +82,14 @@ export class TweetMonitor {
       const client = this.twitterClient.getMonitorClient();
       
       try {
+        // https://docs.x.com/x-api/posts/user-posts-timeline-by-user-id
         const response: TwitterResponse = await client.tweets.usersIdTweets(this.twitterConfig.targetUserId, {
           max_results: config.maxTweetsPerRequest,
           since_id: state.lastTweetId || undefined,
           "tweet.fields": ["id", "text", "author_id", "created_at", "conversation_id", "in_reply_to_user_id"],
           "media.fields": ["url", "preview_image_url", "type", "variants"],
           "expansions": ["author_id", "attachments.media_keys"],
-          start_time: DateUtils.getFifteenMinutesAgo()
+          // start_time: DateUtils.getFifteenMinutesAgo()
         });
 
         if (!response.data?.length) {
@@ -110,14 +122,16 @@ export class TweetMonitor {
               text: tweet.text,
               inReplyToUserId: tweet.in_reply_to_user_id || null,
               mediaUrls: mediaUrls.length > 0 ? JSON.stringify(mediaUrls) : null,
-              status: 'pending'
+              status: Status.Pending
             }
           });
         }
 
-        // 更新最后处理的推文ID
+        // 更新最后处理的推文ID，使用目标用户ID作为id
         await this.prisma.processState.update({
-          where: { id: 'default' },
+          where: { 
+            id: this.twitterConfig.targetUserId
+          },
           data: {
             lastTweetId: response.data[0].id,
             updatedAt: BigInt(Date.now())
@@ -136,6 +150,10 @@ export class TweetMonitor {
           if (resetTime) {
             const waitTime = (parseInt(resetTime) * 1000) - Date.now();
             this.logger.warn(`Rate limited. Waiting for ${waitTime / 1000} seconds...`);
+            
+            // 等待指定时间
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            this.logger.info('Rate limit wait time completed, resuming monitoring');
           }
         } else {
           throw error;
@@ -143,8 +161,9 @@ export class TweetMonitor {
       }
     } catch (error) {
       this.logger.error('Error in monitor task:', error instanceof Error ? error.message : 'Unknown error');
-      this.eventBus.emit(ServiceEvent.MONITOR_COMPLETED, {
-        error: error instanceof Error ? error : new Error('Unknown error')
+      this.eventBus.emit(ServiceEvent.MONITOR_ERROR, {
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        targetUserId: this.twitterConfig.targetUserId
       });
     } finally {
       this.isProcessing = false;
@@ -171,6 +190,6 @@ export class TweetMonitor {
 
   public stop() {
     this.job.stop();
-    this.logger.info('Tweet monitoring service stopped');
+    this.logger.info(`Tweet monitoring service for ${this.twitterConfig.name} stopped`);
   }
 } 

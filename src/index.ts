@@ -25,8 +25,8 @@ async function main() {
 
     // 4. 为每个配置创建服务实例
     for (const twitterConfig of config.twitterConfig) {
-      const monitor = new TweetMonitor(twitterConfig);
-      const publisher = new TweetPublisher(twitterConfig);
+      const monitor = TweetMonitor.getInstance(twitterConfig);
+      const publisher = TweetPublisher.getInstance(twitterConfig);
 
       monitors.push(monitor);
       publishers.push(publisher);

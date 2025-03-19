@@ -4,6 +4,13 @@ import { Config } from '../types/config';
 // 加载环境变量
 dotenv.config();
 
+// Twitter API v2 App Settings Required:
+// 1. OAuth 1.0a settings:
+//    - App permissions: Read and Write
+//    - Type of App: Native App or Automated App
+//    - Callback URL / Redirect URL: http://127.0.0.1
+//    - Website URL: http://127.0.0.1
+
 function validateConfig(config: Partial<Config>): config is Config {
   const requiredFields: (keyof Config)[] = [
     'twitterConfig',

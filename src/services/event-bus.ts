@@ -2,6 +2,7 @@ import { Logger } from '../utils/logger';
 
 export enum ServiceEvent {
   MONITOR_COMPLETED = 'MONITOR_COMPLETED',
+  MONITOR_ERROR = 'MONITOR_ERROR',
   ANALYSIS_COMPLETED = 'ANALYSIS_COMPLETED',
   TRANSLATION_COMPLETED = 'TRANSLATION_COMPLETED'
 }
@@ -10,6 +11,7 @@ export interface EventData {
   tweetCount?: number;
   threadId?: string;
   authorId?: string;
+  targetUserId?: string;
   error?: Error;
 }
 

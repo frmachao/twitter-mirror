@@ -9,7 +9,7 @@ generator client {
 
 // 处理状态记录 - 用于监控服务的状态管理
 model ProcessState {
-  id            String   @id
+  id            String   @id  // 使用目标用户ID作为主键值
   startTime     BigInt
   updatedAt     BigInt
   lastTweetId   String?
