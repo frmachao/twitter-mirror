@@ -38,3 +38,9 @@ prisma/*.db-journal
 prisma/*.db-lock
 prisma/*.db-trace.json
 prisma/*.db-trace.json-journal
+
+# logs
+logs/*
+
+# dist
+dist/*
