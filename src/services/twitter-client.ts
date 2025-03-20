@@ -1,6 +1,6 @@
 import { Client } from 'twitter-api-sdk';
 import { Config } from '../types/config';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import oAuth1a from 'twitter-v1-oauth';
 import { Logger } from '../utils/logger';
 import * as fs from 'fs';
@@ -13,7 +13,7 @@ export class TwitterClient {
   private logger: Logger;
 
   private constructor(private twitterConfig: Config['twitterConfig'][0]) {
-    this.monitorClient = new Client(twitterConfig.monitorAccountToken);
+    this.monitorClient = new Client(twitterConfig.BearerToken);
     this.logger = new Logger(`TwitterClient:${twitterConfig.name}`);
   }
 
@@ -175,7 +175,8 @@ export class TwitterClient {
       this.logger.info(`[${this.twitterConfig.name}] Successfully created tweet${replyToId ? ` in reply to ${replyToId}` : ''}`);
       return response.data;
     } catch (error) {
-      this.logger.error(`[${this.twitterConfig.name}] Error creating tweet:`, error);
+      const twitterError = error as AxiosError;
+      this.logger.error(`[${this.twitterConfig.name}] Error creating tweet:`, twitterError?.message);
       throw error;
     }
   }

@@ -23,19 +23,8 @@ CREATE TABLE "Tweet" (
 );
 
 -- CreateTable
-CREATE TABLE "PublisherAccount" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "token" TEXT NOT NULL,
-    "dailyUsageCount" INTEGER NOT NULL DEFAULT 0,
-    "lastResetAt" BIGINT NOT NULL,
-    "createdAt" BIGINT NOT NULL,
-    "updatedAt" BIGINT NOT NULL
-);
-
--- CreateTable
 CREATE TABLE "Thread" (
     "id" TEXT NOT NULL PRIMARY KEY,
-    "rootTweetId" TEXT NOT NULL,
     "authorId" TEXT NOT NULL,
     "createdAt" BIGINT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',

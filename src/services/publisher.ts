@@ -22,7 +22,7 @@ export class TweetPublisher {
     this.taskQueue = new TaskQueue({
       name: `publish:${twitterConfig.name}`,
       concurrency: 1,
-      maxRetries: 3,
+      maxRetries: 0,
       retryDelay: 5000
     });
 

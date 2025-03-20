@@ -34,7 +34,6 @@ model Tweet {
 // 线程记录 - 组织推文发布单位
 model Thread {
   id          String   @id            // 线程ID，对应会话ID
-  rootTweetId String                  // 根推文ID
   authorId    String                  // 作者ID
   createdAt   BigInt                  // 创建时间
   status      String   @default("pending") // 线程状态：pending（待处理）, analyzed（已分析）, translated（已翻译）, published（已发布）, failed（失败）

@@ -5,8 +5,7 @@ export interface PublisherAccount {
 
 export interface TwitterConfig {
   name: string;
-  monitorAccountToken: string;
-  publisherAccountToken: string;
+  BearerToken : string;
   targetUserId: string;
   oauth: {
     apiKey: string;

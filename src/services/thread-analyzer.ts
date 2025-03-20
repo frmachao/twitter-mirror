@@ -1,23 +1,29 @@
-import { Database } from './database';
-import { Logger } from '../utils/logger';
-import { Status, isValidStatusTransition, InvalidStatusTransitionError } from '../types/status';
-import { EventBus, ServiceEvent } from './event-bus';
+import { Database } from "./database";
+import { Logger } from "../utils/logger";
+import {
+  Status,
+  isValidStatusTransition,
+  InvalidStatusTransitionError,
+} from "../types/status";
+import { EventBus, ServiceEvent } from "./event-bus";
 
 export class ThreadAnalyzer {
   private static instance: ThreadAnalyzer;
-  private prisma: ReturnType<Database['getPrisma']>;
+  private prisma: ReturnType<Database["getPrisma"]>;
   private logger: Logger;
   private isProcessing: boolean = false;
   private eventBus: EventBus;
 
   private constructor() {
     this.prisma = Database.getInstance().getPrisma();
-    this.logger = new Logger('ThreadAnalyzer');
+    this.logger = new Logger("ThreadAnalyzer");
     this.eventBus = EventBus.getInstance();
-    
+
     // 订阅监控完成事件
     this.eventBus.subscribe(ServiceEvent.MONITOR_COMPLETED, () => {
-      this.logger.info('Received MONITOR_COMPLETED event, starting tweet analysis');
+      this.logger.info(
+        "Received MONITOR_COMPLETED event, starting tweet analysis"
+      );
       this.processPendingTweets();
     });
   }
@@ -29,13 +35,12 @@ export class ThreadAnalyzer {
     return ThreadAnalyzer.instance;
   }
 
-
   /**
    * 处理待分析的推文
    */
   private async processPendingTweets(): Promise<void> {
     if (this.isProcessing) {
-      this.logger.warn('Previous analysis task is still running, skipping...');
+      this.logger.warn("Previous analysis task is still running, skipping...");
       return;
     }
 
@@ -44,62 +49,76 @@ export class ThreadAnalyzer {
       // 获取待分析的推文
       const pendingTweets = await this.prisma.tweet.findMany({
         where: {
-          status: 'pending'
+          status: "pending",
         },
         select: {
           id: true,
           conversationId: true,
           inReplyToUserId: true,
           authorId: true,
-          createdAt: true
+          createdAt: true,
         },
         orderBy: {
-          createdAt: 'asc'
-        }
+          createdAt: "asc",
+        },
       });
 
       if (!pendingTweets.length) {
-        this.logger.info('No pending tweets to analyze');
+        this.logger.info("No pending tweets to analyze");
         return;
       }
 
-      this.logger.info(`Found ${pendingTweets.length} pending tweets to analyze`);
-      
+      this.logger.info(
+        `Found ${pendingTweets.length} pending tweets to analyze`
+      );
+
       // 记录已分析完成的线程ID
       const analyzedThreadIds = new Set<string>();
-      
+
       // 处理所有待分析推文
       for (const tweet of pendingTweets) {
         await this.analyzeTweet(tweet);
-        
+
         // 获取更新后的推文信息
         const updatedTweet = await this.prisma.tweet.findUnique({
           where: { id: tweet.id },
-          select: { threadId: true }
+          select: { threadId: true },
         });
-        
+
         if (updatedTweet?.threadId) {
           analyzedThreadIds.add(updatedTweet.threadId);
         }
       }
 
+      // 批量更新线程状态
+      if (analyzedThreadIds.size > 0) {
+        await this.prisma.thread.updateMany({
+          where: {
+            id: {
+              in: Array.from(analyzedThreadIds),
+            },
+          },
+          data: {
+            status: Status.Analyzed,
+            updatedAt: BigInt(Date.now()),
+          },
+        });
+        this.logger.info(
+          `Updated status for ${analyzedThreadIds.size} threads`
+        );
+      }
+
       // 触发已分析线程的事件
       for (const threadId of analyzedThreadIds) {
-        const thread = await this.prisma.thread.findUnique({
-          where: { id: threadId },
-          select: { authorId: true }
+        this.logger.info(
+          `Thread ${threadId} analysis completed, emitting ANALYSIS_COMPLETED event`
+        );
+        this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED, {
+          threadId,
         });
-        
-        if (thread) {
-          this.logger.info(`Thread ${threadId} analysis completed, emitting ANALYSIS_COMPLETED event`);
-          this.eventBus.emit(ServiceEvent.ANALYSIS_COMPLETED, {
-            threadId,
-            authorId: thread.authorId
-          });
-        }
       }
     } catch (error) {
-      this.logger.error('Error in processPendingTweets:', error);
+      this.logger.error("Error in processPendingTweets:", error);
     } finally {
       this.isProcessing = false;
     }
@@ -126,7 +145,7 @@ export class ThreadAnalyzer {
       // 处理线程中的推文
       await this.handleThreadTweet(tweet);
     } catch (error) {
-      this.logger.error('Error analyzing tweet:', error);
+      this.logger.error("Error analyzing tweet:", error);
       throw error;
     }
   }
@@ -145,14 +164,13 @@ export class ThreadAnalyzer {
     const thread = await this.prisma.thread.create({
       data: {
         id: tweet.id,
-        rootTweetId: tweet.id,
         authorId: tweet.authorId,
         createdAt: tweet.createdAt,
         status: Status.Analyzed,
         tweets: {
-          connect: { id: tweet.id }
-        }
-      }
+          connect: { id: tweet.id },
+        },
+      },
     });
 
     // 更新推文状态
@@ -161,8 +179,8 @@ export class ThreadAnalyzer {
       data: {
         threadId: thread.id,
         isRoot: true,
-        status: Status.Analyzed
-      }
+        status: Status.Analyzed,
+      },
     });
   }
 
@@ -183,19 +201,18 @@ export class ThreadAnalyzer {
       where: { id: tweet.conversationId },
       create: {
         id: tweet.conversationId,
-        rootTweetId: tweet.conversationId,
         authorId: tweet.authorId,
         createdAt: tweet.createdAt,
         status: Status.Pending,
         tweets: {
-          connect: { id: tweet.id }
-        }
+          connect: { id: tweet.id },
+        },
       },
       update: {
         tweets: {
-          connect: { id: tweet.id }
-        }
-      }
+          connect: { id: tweet.id },
+        },
+      },
     });
 
     // 检查状态转换是否有效
@@ -209,20 +226,8 @@ export class ThreadAnalyzer {
       data: {
         threadId: thread.id,
         isRoot: tweet.id === tweet.conversationId,
-        status: Status.Analyzed
-      }
-    });
-
-    // 合并线程更新操作
-    await this.prisma.thread.update({
-      where: { id: thread.id },
-      data: {
-        ...(tweet.id === tweet.conversationId && {
-          rootTweetId: tweet.id,
-        }),
         status: Status.Analyzed,
-        updatedAt: BigInt(Date.now())
-      }
+      },
     });
   }
-} 
+}
