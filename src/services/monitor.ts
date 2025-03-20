@@ -89,7 +89,7 @@ export class TweetMonitor {
           "tweet.fields": ["id", "text", "author_id", "created_at", "conversation_id", "in_reply_to_user_id"],
           "media.fields": ["url", "preview_image_url", "type", "variants"],
           "expansions": ["author_id", "attachments.media_keys"],
-          // start_time: DateUtils.getFifteenMinutesAgo()
+          start_time: DateUtils.getCurrentTime()
         });
 
         if (!response.data?.length) {
