@@ -7,10 +7,14 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "prisma:generate": "prisma generate",
+    "prisma:diff": "prisma migrate diff",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:safe": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "retry-failed": "ts-node scripts/retry-failed-tweets.ts",
-    "trigger-translation": "ts-node scripts/trigger-translation.ts"
+    "trigger-translation": "ts-node scripts/trigger-translation.ts",
+    "preprisma:migrate": "npm run prisma:diff",
+    "preprisma:migrate:safe": "npm run prisma:diff"
   },
   "keywords": [],
   "author": "",
