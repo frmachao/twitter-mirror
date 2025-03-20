@@ -48,26 +48,37 @@ CRON_MONITOR="*/15 * * * *"  # Every 15 minutes
 
 ## Development
 
-1. Build the project:
+1. Generate Prisma Client and set up database:
 ```bash
-npm run build
+npm run prisma:generate   # Generate Prisma Client
+npm run prisma:migrate   # Set up database schema
 ```
 
 2. Start in development mode:
 ```bash
-npm run dev
+npm run dev    # Uses ts-node to run TypeScript directly
 ```
 
 ## Production Deployment
 
-1. Build the project:
+1. Install dependencies:
 ```bash
-npm run build
+npm install
 ```
 
-2. Start with PM2:
+2. Generate Prisma Client:
 ```bash
-npm run pm2:start:prod
+npm run prisma:generate
+```
+
+3. Build the project:
+```bash
+npm run build    # Compiles TypeScript to JavaScript
+```
+
+4. Start with PM2:
+```bash
+npm run pm2:start
 ```
 
 Other PM2 commands:
