@@ -71,12 +71,17 @@ npm install
 npm run prisma:generate
 ```
 
-3. Build the project:
+3. Apply database migrations:
+```bash
+npm run prisma:migrate:safe   # Safely apply database migrations
+```
+
+4. Build the project:
 ```bash
 npm run build    # Compiles TypeScript to JavaScript
 ```
 
-4. Start with PM2:
+5. Start with PM2:
 ```bash
 npm run pm2:start
 ```
