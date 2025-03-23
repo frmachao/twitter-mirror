@@ -17,12 +17,14 @@ export class TweetMonitor {
   private isProcessing: boolean = false;
   private logger: Logger;
   private eventBus: EventBus;
+  private startTime: string;
 
-  private constructor(private twitterConfig: Config['twitterConfig'][0]) {
+  private constructor(private readonly twitterConfig: Config['twitterConfig'][0]) {
     this.prisma = Database.getInstance().getPrisma();
     this.twitterClient = TwitterClient.getInstance(twitterConfig);
     this.logger = new Logger(`TweetMonitor:${twitterConfig.name}`);
     this.eventBus = EventBus.getInstance();
+    this.startTime = DateUtils.getCurrentTime();
   }
 
   public static getInstance(twitterConfig: Config['twitterConfig'][0]): TweetMonitor {
@@ -89,7 +91,7 @@ export class TweetMonitor {
           "tweet.fields": ["id", "text", "author_id", "created_at", "conversation_id", "in_reply_to_user_id"],
           "media.fields": ["url", "preview_image_url", "type", "variants"],
           "expansions": ["author_id", "attachments.media_keys"],
-          start_time: DateUtils.getCurrentTime()
+          start_time: this.startTime
         });
 
         if (!response.data?.length) {
@@ -175,6 +177,7 @@ export class TweetMonitor {
    */
   public start(): void {
     this.logger.info(`Starting monitor service for ${this.twitterConfig.name}`);
+    this.logger.info(`Initial start_time set to: ${this.startTime}`);
     
     // 先执行一次监控任务
     this.logger.info('Executing initial monitor task...');
